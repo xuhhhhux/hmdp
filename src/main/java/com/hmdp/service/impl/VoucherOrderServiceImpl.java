@@ -45,10 +45,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (voucher.getStock() < 1) {
             return Result.fail("库存不足");
         }
-        LambdaUpdateWrapper<SeckillVoucher> updateWrapper = Wrappers.lambdaUpdate(SeckillVoucher.class)
-                .eq(SeckillVoucher::getVoucherId, voucherId)
-                .set(SeckillVoucher::getStock, voucher.getStock() - 1);
-        boolean ok = seckillVoucherService.update(null, updateWrapper);
+
+        boolean ok = seckillVoucherService.update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherId)
+                .gt("stock", 0)
+                .update();
+
         if (!ok) {
             return Result.fail("库存不足");
         }
