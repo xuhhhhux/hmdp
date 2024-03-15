@@ -11,6 +11,7 @@ import com.hmdp.utils.RedisConstants;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.concurrent.TimeUnit;
 
@@ -33,7 +34,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Override
     public Result queryShopById(Long id) {
         if (id == null) {
-            throw new RuntimeException("id不能为null");
+            throw new RuntimeException("id不能为空");
         }
         String shopJson = stringRedisTemplate.opsForValue().get(CACHE_SHOP_KEY + id);
         if (StrUtil.isNotBlank(shopJson)) {
@@ -45,5 +46,15 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
         stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY + id, JSON.toJSONString(shop), CACHE_SHOP_TTL, TimeUnit.MINUTES);
         return Result.ok(shop);
+    }
+
+    @Override
+    @Transactional
+    public void update(Shop shop) {
+        if (shop == null || shop.getId() == null) {
+            throw new RuntimeException("参数不能为空");
+        }
+        baseMapper.updateById(shop);
+        stringRedisTemplate.delete(CACHE_SHOP_KEY + shop.getId());
     }
 }
