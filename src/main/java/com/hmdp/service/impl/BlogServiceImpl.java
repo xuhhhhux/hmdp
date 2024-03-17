@@ -1,7 +1,10 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
@@ -16,7 +19,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.hmdp.utils.RedisConstants.BLOG_LIKED_KEY;
 
@@ -65,10 +71,17 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     }
 
     private void queryBlogIsLike(Blog blog) {
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return;
+        }
         Long userId = UserHolder.getUser().getId();
+        if (userId == null) {
+            return;
+        }
         String key = BLOG_LIKED_KEY + blog.getId();
-        Boolean ok = stringRedisTemplate.opsForSet().isMember(key, userId.toString());
-        blog.setIsLike(Boolean.TRUE.equals(ok));
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
+        blog.setIsLike(Boolean.TRUE.equals(score != null));
     }
 
     private void queryBlogUser(Blog blog) {
@@ -83,20 +96,33 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         Long userId = UserHolder.getUser().getId();
         String key = BLOG_LIKED_KEY + id;
 
-        Boolean ok = stringRedisTemplate.opsForSet().isMember(key, userId.toString());
-        if (Boolean.FALSE.equals(ok)) {
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
+        if (score == null) {
             boolean cnt = update().setSql("liked = liked + 1").eq("id", id).update();
             if (cnt) {
-                stringRedisTemplate.opsForSet().add(key, userId.toString());
+                stringRedisTemplate.opsForZSet().add(key, userId.toString(), System.currentTimeMillis());
             }
         } else {
             boolean cnt = update().setSql("liked = liked - 1").eq("id", id).update();
             if (cnt) {
-                stringRedisTemplate.opsForSet().remove(key, userId.toString());
+                stringRedisTemplate.opsForZSet().remove(key, userId.toString());
             }
         }
 
         return Result.ok();
+    }
+
+    @Override
+    public Result queryLikes(Long id) {
+        String key = BLOG_LIKED_KEY + id;
+        Set<String> set = stringRedisTemplate.opsForZSet().range(key, 0, 4);
+        List<Long> ids = set.stream().map(Long::valueOf).collect(Collectors.toList());
+
+        String sql = StrUtil.join(",", ids);
+        List<UserDTO> userDTOS = userService.query().in("id", ids).last("order by FIELD(id, " + sql + ")").list()
+                .stream().map(user -> BeanUtil.copyProperties(user, UserDTO.class)).collect(Collectors.toList());
+
+        return Result.ok(userDTOS);
     }
 
 }
