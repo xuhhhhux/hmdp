@@ -17,16 +17,22 @@ import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
+import javafx.scene.input.DataFormat;
 import jdk.nashorn.internal.runtime.regexp.joni.Regex;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpSession;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.*;
@@ -91,6 +97,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             return Result.ok();
         }
         return Result.ok(BeanUtil.copyProperties(user, UserDTO.class));
+    }
+
+    @Override
+    public Result sign() {
+        Long userId = UserHolder.getUser().getId();
+        LocalDateTime now = LocalDateTime.now();
+        String date = now.format(DateTimeFormatter.ofPattern(":yyyy:MM"));
+        String key = USER_SIGN_KEY + userId + date;
+        int day = now.getDayOfMonth() - 1;
+        stringRedisTemplate.opsForValue().setBit(key, day, true);
+        return Result.ok();
     }
 
     private User createUserWithPhone(String phone) {
