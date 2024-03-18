@@ -25,6 +25,7 @@ import javafx.scene.input.DataFormat;
 import jdk.nashorn.internal.runtime.regexp.joni.Regex;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ import javax.servlet.http.HttpSession;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static com.hmdp.utils.RedisConstants.*;
@@ -108,6 +110,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         int day = now.getDayOfMonth() - 1;
         stringRedisTemplate.opsForValue().setBit(key, day, true);
         return Result.ok();
+    }
+
+    @Override
+    public Result signCount() {
+        Long userId = UserHolder.getUser().getId();
+        LocalDateTime now = LocalDateTime.now();
+        String date = now.format(DateTimeFormatter.ofPattern(":yyyy:MM"));
+        String key = USER_SIGN_KEY + userId + date;
+        int day = now.getDayOfMonth();
+        List<Long> result = stringRedisTemplate.opsForValue().bitField(
+                key, BitFieldSubCommands.create()
+                        .get(BitFieldSubCommands.BitFieldType.unsigned(day)).valueAt(0));
+        if (result == null || result.isEmpty()) {
+            return Result.ok(0);
+        }
+        Long sum = result.get(0);
+        if (sum == null) {
+            return Result.ok(0);
+        }
+
+        int count = 0;
+        while (true) {
+            if (sum % 2 == 0) {
+                break;
+            } else {
+                count++;
+            }
+            sum >>>= 1;
+        }
+
+        return Result.ok(count);
     }
 
     private User createUserWithPhone(String phone) {
